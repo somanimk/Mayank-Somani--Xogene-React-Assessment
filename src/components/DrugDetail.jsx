@@ -2,52 +2,58 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 
-const DrugDetail = () => {
-  const { drugName } = useParams();
-  const [drugDetails, setDrugDetails] = useState(null);
-  const [error, setError] = useState('');
+function DrugDetail() {
+    const { drugName } = useParams();
+    const [drugInfo, setDrugInfo] = useState({});
+    const [ndcs, setNdcs] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
 
-  useEffect(() => {
-    const fetchDrugDetails = async () => {
-      try {
-        const detailResponse = await axios.get(`https://rxnav.nlm.nih.gov/REST/drugs?name=${drugName}`);
-        const details = detailResponse.data.drugGroup.conceptGroup
-          .flatMap(group => group.conceptProperties)
-          .find(drug => drug.name.toLowerCase() === drugName.toLowerCase());
-        
-        if (details) {
-          setDrugDetails(details);
-          const ndcResponse = await axios.get(`https://rxnav.nlm.nih.gov/REST/rxcui/${details.rxcui}/ndcs`);
-          details.ndcs = ndcResponse.data.ndcGroup.ndcList.ndc;
-          setDrugDetails(details);
-        } else {
-          setError('Drug not found');
-        }
-      } catch (error) {
-        console.error('Error fetching drug details:', error);
-        setError('Failed to fetch drug data');
-      }
-    };
+    useEffect(() => {
+        const fetchDrugDetails = async () => {
+            try {
+                const response = await axios.get(`https://rxnav.nlm.nih.gov/REST/drugs.json?name=${drugName}`);
+                if (response.data.drugGroup.conceptGroup) {
+                    const drugData = (response.data.drugGroup.conceptGroup || []).find(drug => drug.conceptProperties && drug.conceptProperties[0].name.toLowerCase() === drugName.toLowerCase());
+                    if (drugData) {
+                        setDrugInfo(drugData.conceptProperties[0]);
+                        const ndcResponse = await axios.get(`https://rxnav.nlm.nih.gov/REST/rxcui/${drugData.conceptProperties[0].rxcui}/ndcs.json`);
+                        setNdcs(ndcResponse.data.ndcGroup.ndcList.ndc || []);
+                    } else {
+                        setError('Drug not found');
+                    }
+                } else {
+                    setError('Drug not found');
+                }
+            } catch (err) {
+                setError('An error occurred while fetching data');
+            } finally {
+                setLoading(false);
+            }
+        };
 
-    fetchDrugDetails();
-  }, [drugName]);
+        fetchDrugDetails();
+    }, [drugName]);
 
-  if (error) return <div className="error">{error}</div>;
-  if (!drugDetails) return <div>Loading...</div>;
+    if (loading) {
+        return <p>Loading...</p>;
+    }
 
-  return (
-    <div className="drug-detail-container">
-      <h1>{drugDetails.name}</h1>
-      <p>RxCUI: {drugDetails.rxcui}</p>
-      <p>Synonym: {drugDetails.synonym}</p>
-      <div>
-        <h3>NDCs</h3>
-        <ul>
-          {drugDetails.ndcs && drugDetails.ndcs.map(ndc => <li key={ndc}>{ndc}</li>)}
-        </ul>
-      </div>
-    </div>
-  );
-};
+    if (error) {
+        return <p>{error}</p>;
+    }
+
+    return (
+        <div>
+            <h1>{drugInfo.name}</h1>
+            <p>RXCUI: {drugInfo.rxcui}</p>
+            <p>Synonym: {drugInfo.synonym}</p>
+            <h2>NDCs</h2>
+            <ul>
+                {ndcs.map((ndc, index) => (<li key={index}>{ndc}</li>))}
+            </ul>
+        </div>
+    );
+}
 
 export default DrugDetail;

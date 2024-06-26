@@ -1,43 +1,63 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 
-const Search = () => {
+function Search() {
   const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const handleSearch = async (e) => {
-    e.preventDefault();
+  const handleSearch = async () => {
+    setError('');
     try {
-      const response = await axios.get(`https://rxnav.nlm.nih.gov/REST/drugs?name=${query}`);
-      // Check if the response includes any drug information
-      const groups = response.data.drugGroup.conceptGroup || [];
-      const drugs = groups.flatMap(group => group.conceptProperties || []);
-      if (drugs.length > 0) {
-        // Navigate to the details page of the first result
-        navigate(`/drugs/${drugs[0].name}`);
+      const response = await axios.get(`https://rxnav.nlm.nih.gov/REST/drugs.json?name=${query}`);
+      if (response.data.drugGroup.conceptGroup) {
+        const concepts = response.data.drugGroup.conceptGroup.reduce((acc, group) => {
+          return acc.concat(group.conceptProperties || []);
+        }, []);
+        setResults(concepts);
       } else {
-        alert('No drugs found');
+        const suggestions = await axios.get(`https://rxnav.nlm.nih.gov/REST/spellingsuggestions.json?name=${query}`);
+        if (suggestions.data.suggestionGroup.suggestionList) {
+          setResults(suggestions.data.suggestionGroup.suggestionList.suggestion || []);
+        } else {
+          setError('No results found.');
+        }
       }
-    } catch (error) {
-      console.error('Error fetching drugs:', error);
-      alert('Failed to fetch drug data');
+    } catch (err) {
+      setError('An error occurred while fetching data.');
     }
   };
 
+  const handleInputChange = (e) => {
+    setQuery(e.target.value);
+  };
+
+  const handleResultClick = (name) => {
+    navigate(`/drugs/${name}`);
+  };
+
   return (
-    <div className="search-container">
-      <form onSubmit={handleSearch}>
-        <input
-          type="text"
-          placeholder="Search for a drug"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        <button type="submit">Search</button>
-      </form>
+    <div>
+      <h1>Drug Search</h1>
+      <input
+        type="text"
+        value={query}
+        onChange={handleInputChange}
+        placeholder="Search for a drug"
+      />
+      <button onClick={handleSearch}>Search</button>
+      {error && <p>{error}</p>}
+      <ul>
+        {results.map((result, index) => (
+          <li key={index} onClick={() => handleResultClick(result.name || result)}>
+            {result.name || result}
+          </li>
+        ))}
+      </ul>
     </div>
   );
-};
+}
 
 export default Search;
